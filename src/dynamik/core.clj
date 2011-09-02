@@ -85,15 +85,13 @@
                     (swap! types conj type)))))]
     p))
 
-(defn menu-panel [{:keys [create-menu default-type]}]
-  (let [p (type-panel create-menu)]
-    (.setType p default-type)
-    p))
-
-(defn content-panel [{:keys [create-content default-type]}]
-  (let [p (type-panel create-content)]
-    (.setType p default-type)
-    p))
+(defn content-menu-panel [{:keys [create-content default-type]}]
+  (let [ct (memoize create-content)
+        cp (type-panel #(:content (ct %)))
+        mp (type-panel #(:menu (ct %)))]
+    (.setType cp default-type)
+    (.setType mp default-type)
+    {:content cp :menu mp}))
 
 ;; listening
 
@@ -178,8 +176,7 @@
         mrg-draw-direction (atom nil)
         cardp (atom nil)
         typec (type-combo-box options)
-        content (content-panel options)
-        menu (menu-panel options)
+        {:keys [content menu]} (content-menu-panel options)
         menu-panel (javax.swing.JPanel. (BorderLayout.))
         edit-bar-west (edit-bar :west content)
         edit-bar-south (edit-bar :south content)
@@ -207,6 +204,7 @@
     enclosing-panel))
 
 (defn tile [{:keys [parent contp] :as options}]
+  (println "created tile!")
   (let [id (str (gensym "card panel"))
         contp-atom (atom (if contp contp (view options)))
         splitp-atom (atom nil)
@@ -223,10 +221,12 @@
                                               :vertical   JSplitPane/HORIZONTAL_SPLIT)
                                  true
                                  (tile (merge options {:parent this :contp @contp-atom}))
-                                 (tile (merge options {:parent this})))]
-                    (.setBorder splitp (javax.swing.border.EmptyBorder. 0 0 0 0))
-                    (.setDividerSize splitp 5)
-                    (.setDividerLocation splitp (int coordinate))
+                                 (tile (merge options {:parent this :contp nil})))]
+                    (doto splitp
+                      (.setResizeWeight 0.5)
+                      (.setBorder (javax.swing.border.EmptyBorder. 0 0 0 0))
+                      (.setDividerSize 5)
+                      (.setDividerLocation (int coordinate)))
                     (set-view this splitp)
                     (reset! splitp-atom splitp)))
                 (dotoMergingSplit [id direction f]
@@ -285,12 +285,11 @@
                 (getContentPanel [] @contp-atom)
                 (getSplitPane [] @splitp-atom))]
     (.setCardPanel @contp-atom cardp)
-    ;(.setBorder cardp (javax.swing.border.EmptyBorder. 0 0 0 0))
     (.add cardp @contp-atom "no split")
     cardp))
 
 (defn test-component []
-  (tile {:create-content (fn [type] (javax.swing.JTextArea. (str (gensym type))))
-         :create-menu (fn [type ] (javax.swing.JLabel. (str "menu for " type)))
+  (tile {:create-content (fn [type] {:content (javax.swing.JTextArea. (str (gensym type)))
+                                     :menu (javax.swing.JLabel. (str "menu for " type))})
          :default-type "type1"
          :types (into-array ["type1" "type2" "type3"])}))
