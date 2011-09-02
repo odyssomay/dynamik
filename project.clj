@@ -1,4 +1,3 @@
-(defproject dynamik "1.0.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :dependencies [[org.clojure/clojure "1.2.1"]
-                 [seesaw "1.1.0"]])
+(defproject dynamik "1"
+  :description "A dynamic ui very similar to that of blender."
+  :dependencies [[org.clojure/clojure "1.2.1"]])
