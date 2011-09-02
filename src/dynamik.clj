@@ -1,5 +1,5 @@
 (ns dynamik
-  (:gen-class))
+  (:use dynamik.core))
 
-(defn -getPanel [])
-
+(defn dynamik-panel [& options]
+  (tile options))
