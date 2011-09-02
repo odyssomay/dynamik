@@ -204,7 +204,6 @@
     enclosing-panel))
 
 (defn tile [{:keys [parent contp] :as options}]
-  (println "created tile!")
   (let [id (str (gensym "card panel"))
         contp-atom (atom (if contp contp (view options)))
         splitp-atom (atom nil)
@@ -289,7 +288,13 @@
     cardp))
 
 (defn test-component []
-  (tile {:create-content (fn [type] {:content (javax.swing.JTextArea. (str (gensym type)))
-                                     :menu (javax.swing.JLabel. (str "menu for " type))})
+  (tile {:create-content (fn [type] 
+                           (let [c (javax.swing.JTextArea. (str (gensym type)))
+                                 m (javax.swing.JButton. "insert")]
+                             (.addActionListener m
+                               (reify java.awt.event.ActionListener
+                                 (actionPerformed [_ _]
+                                   (.append c "insert"))))
+                             {:content c :menu m}))
          :default-type "type1"
          :types (into-array ["type1" "type2" "type3"])}))
