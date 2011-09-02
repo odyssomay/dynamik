@@ -1,0 +1,296 @@
+(ns dynamik.core
+  (:import (javax.swing JSplitPane JLayeredPane)
+           java.awt.BorderLayout))
+
+;; protocols
+
+(defprotocol dynamikType
+  (setType [this type])
+  (getType [this]))
+
+(defprotocol dynamikPanel
+  (drawSplit [this coordinate direction] )
+  (drawMrg [this direction])
+  (setCardPanel [this card-panel])
+  (getCardPanel [this]))
+
+(defprotocol dynamikCardPanel
+  (split [this coordinate direction] )
+  (mrg [this id direction] )
+  (sendDrawMrg [this id direction])
+  (dotoMergingSplit [this id direction f] )
+  (getId [this])
+  (setContentPanel [this p])
+  (getContentPanel [this])
+  (getSplitPane [this]))
+
+;; drawing
+
+(defn draw-corner [g triangle-size direction]
+  (let [gc (.create g)]
+    (dotimes [_ 3]
+      (.drawLine gc 0 0 triangle-size triangle-size)
+      (case direction
+        :right (.translate gc (double (/ triangle-size 3)) 0.0)
+        :down  (.translate gc 0.0 (double (/ triangle-size 3)))))))
+
+(defn draw-lines [g triangle-size]
+  (let [gup (.create g)
+        b (.getClipBounds gup)]
+    (.translate gup (- (.width b) triangle-size) 0)
+    (draw-corner gup triangle-size :right))
+  (let [gdown (.create g)
+        b (.getClipBounds gdown)]
+    (.translate gdown 0 (- (.height b) triangle-size))
+    (draw-corner gdown triangle-size :down)))
+
+(defn draw-split [g coordinate direction]
+  (let [b (.getClipBounds g)]
+    (case direction
+      :vertical (.drawLine g coordinate 0 coordinate (.height b))
+      :horizontal (.drawLine g 0 coordinate (.width b) coordinate))))
+
+(defn draw-mrg-arrow [g direction]
+  (let [gc (.create g)
+        b (.getClipBounds gc)]
+    (case direction
+      :down (do (.translate gc (double (/ (.width b) 2)) 0.0)
+                (.fillRect gc
+                  (- (int (/ (.width b) 3)))
+                  0 (int (* (int (/ (.width b) 3)) 2))
+                  (int (/ (.height b) 2)))))))
+
+;; card-layout
+
+(defn show-card [p s]
+  (.show (.getLayout p) p s)
+  (.revalidate p)
+  (.repaint p))
+
+;; type components
+
+(defn type-combo-box [options]
+  (let [cb (javax.swing.JComboBox. (into-array (:types options)))]
+    cb))
+
+(defn type-panel [f]
+  (let [layout (java.awt.CardLayout.)
+        types (atom #{})
+        p (proxy [javax.swing.JPanel dynamik.core.dynamikType] [(java.awt.CardLayout.)]
+            (setType [type]
+              (if (contains? @types type)
+                (show-card this type)
+                (do (.add this (f type) type)
+                    (show-card this type)
+                    (swap! types conj type)))))]
+    p))
+
+(defn menu-panel [{:keys [create-menu default-type]}]
+  (let [p (type-panel create-menu)]
+    (.setType p default-type)
+    p))
+
+(defn content-panel [{:keys [create-content default-type]}]
+  (let [p (type-panel create-content)]
+    (.setType p default-type)
+    p))
+
+;; listening
+
+(defn add-mouse-listener [component enclosing-panel location]
+  (let [start-pos (atom nil)
+        corner    (atom nil)
+        direction (atom nil)
+        splitting? (atom nil)
+        split-direction (atom nil)
+        merging? (atom nil)
+        merge-direction (atom nil)
+        disable-splitting (fn [] (reset! splitting? nil)
+                                 (reset! split-direction nil))
+        disable-mrg (fn [] (reset! merging? nil)
+                           (reset! merge-direction nil))
+        split (fn [coordinate direction]
+                (reset! splitting? true)
+                (reset! split-direction direction)
+                (.drawSplit enclosing-panel coordinate direction)
+                (disable-mrg))
+        mrg   (fn [direction]
+                (.sendDrawMrg (.getCardPanel enclosing-panel) nil direction)
+                (reset! merging? true)
+                (reset! merge-direction direction)
+                (disable-splitting))
+        start (fn [c x y]
+                (reset! corner c)
+                (reset! start-pos [x y]))
+        l (proxy [java.awt.event.MouseAdapter] []
+            (mouseDragged [e]
+              (let [x (.getX e)
+                    y (- (.getY e))]
+                (case location
+                  :west (if (> y 0)
+                          (mrg :up)
+                          (if (> x 0)
+                            (split x :vertical)
+                            (mrg :left)))
+                  :south (if (> x (.getWidth component))
+                           (mrg :right)
+                           (if (> y 0)
+                             (split y :horizontal)
+                             (mrg :down))))))
+            (mouseReleased [e]
+              (when (and @splitting?
+                         @split-direction)
+                (.split (.getCardPanel enclosing-panel)
+                  (case @split-direction
+                    :horizontal (.getY e)
+                    :vertical (.getX e)) @split-direction)
+                (reset! splitting? nil)
+                (reset! split-direction nil))
+              (when (and @merging?
+                         @merge-direction)
+                (.mrg (.getCardPanel enclosing-panel) nil @merge-direction)
+                (reset! merging? nil)
+                (reset! merge-direction nil))
+              (reset! start-pos nil)
+              (reset! corner nil)))]
+    (.addMouseMotionListener component l)
+    (.addMouseListener component l)
+    l))
+
+;; panel
+
+(defn edit-bar [location content]
+  (proxy [javax.swing.JComponent dynamik.core.dynamikPanel] []
+    (paintComponent [g]
+      (let [gc (.create g)
+            b (.getClipBounds g)]
+        (.fillRect gc 0 0 (.width b) (.height b))))
+    (getPreferredSize []
+      (let [d (.getPreferredSize content)]
+        (case location
+          :south (java.awt.Dimension. (.width d) 5)
+          :west (java.awt.Dimension. 5 (.height d)))))))
+
+(defn view [options]
+  (let [card-panel-atom (atom nil)
+        split-direction (atom nil)
+        split-coordinate (atom nil)
+        mrg-draw-direction (atom nil)
+        cardp (atom nil)
+        typec (type-combo-box options)
+        content (content-panel options)
+        menu (menu-panel options)
+        menu-panel (javax.swing.JPanel. (BorderLayout.))
+        edit-bar-west (edit-bar :west content)
+        edit-bar-south (edit-bar :south content)
+        enclosing-panel (proxy [javax.swing.JPanel dynamik.core.dynamikPanel] [(BorderLayout.)]
+                          (drawSplit [coordinate direction] )
+                          (drawMrg [d]     )
+                          (setCardPanel [c-p] (reset! cardp c-p))
+                          (getCardPanel []  @cardp))]
+    (add-mouse-listener edit-bar-west enclosing-panel :west)
+    (add-mouse-listener edit-bar-south enclosing-panel :south)
+    (.addActionListener typec
+      (reify java.awt.event.ActionListener
+        (actionPerformed [_ _]
+          (let [t (.getSelectedItem typec)]
+            (.setType content t)
+            (.setType menu t)))))
+    (doto menu-panel
+      (.add typec BorderLayout/WEST)
+      (.add menu BorderLayout/CENTER))
+    (doto enclosing-panel
+      (.add edit-bar-west BorderLayout/WEST)
+      (.add edit-bar-south BorderLayout/SOUTH)
+      (.add content BorderLayout/CENTER)
+      (.add menu-panel BorderLayout/NORTH))
+    enclosing-panel))
+
+(defn tile [{:keys [parent contp] :as options}]
+  (let [id (str (gensym "card panel"))
+        contp-atom (atom (if contp contp (view options)))
+        splitp-atom (atom nil)
+        set-view (fn [p c]
+                   (let [s (str (gensym))]
+                     (.add p c s)
+                     (.show (.getLayout p) p s)
+                     (.revalidate p)
+                     (.repaint p)))
+        cardp (proxy [javax.swing.JPanel dynamik.core.dynamikCardPanel] [(java.awt.CardLayout.)]
+                (split [coordinate direction]
+                  (let [splitp (JSplitPane. (case direction
+                                              :horizontal JSplitPane/VERTICAL_SPLIT
+                                              :vertical   JSplitPane/HORIZONTAL_SPLIT)
+                                 true
+                                 (tile (merge options {:parent this :contp @contp-atom}))
+                                 (tile (merge options {:parent this})))]
+                    (.setBorder splitp (javax.swing.border.EmptyBorder. 0 0 0 0))
+                    (.setDividerSize splitp 5)
+                    (.setDividerLocation splitp (int coordinate))
+                    (set-view this splitp)
+                    (reset! splitp-atom splitp)))
+                (dotoMergingSplit [id direction f]
+                  (let [sp (.getSplitPane this)]
+                    (if (and id sp)
+                      (condp = (.getOrientation sp)
+                        JSplitPane/VERTICAL_SPLIT
+                        (cond 
+                          (and (= id (.getId (.getTopComponent sp)))
+                               (= direction :down))
+                            (f this id direction)
+                          (and (= id (.getId (.getBottomComponent sp)))
+                               (= direction :up))
+                            (f this id direction)
+                          :else (if parent 
+                                  (.dotoMergingSplit parent (.getId this) direction f)
+                                  (println "merging doesn't make sense!")))
+                        JSplitPane/HORIZONTAL_SPLIT
+                        (cond
+                          (and (= id (.getId (.getLeftComponent sp)))
+                               (= direction :right))
+                            (f this id direction)
+                          (and (= id (.getId (.getRightComponent sp)))
+                               (= direction :left))
+                            (f this id direction)
+                          :else (if parent 
+                                  (.dotoMergingSplit parent (.getId this) direction f)
+                                  (println "merging doesn't make sense!"))))
+                      (if parent
+                        (.dotoMergingSplit parent (.getId this) direction f)))))
+                (mrg [id direction]
+                  (.dotoMergingSplit this id direction 
+                    (fn [cardp id direction]
+                      (let [sp (.getSplitPane cardp)
+                            c (case direction
+                                :right (.getLeftComponent sp)
+                                :left (.getRightComponent sp)
+                                :up (.getBottomComponent sp)
+                                :down (.getTopComponent sp))]
+                        (.setContentPanel cardp c)))))
+                (sendDrawMrg [id direction]
+                  (.dotoMergingSplit this id direction
+                    (fn [cardp id direction]
+                      (let [sp (.getSplitPane cardp)
+                            c (case direction
+                                :right (.getRightComponent sp)
+                                :left (.getLeftComponent sp)
+                                :up (.getTopComponent sp)
+                                :down (.getBottomComponent sp))]
+                        (.drawMrg (.getContentPanel c) direction)))))
+                (getId [] id)
+                (setContentPanel [p]
+                  (reset! contp-atom p)
+                  (reset! splitp-atom nil)
+                  (set-view this p))
+                (getContentPanel [] @contp-atom)
+                (getSplitPane [] @splitp-atom))]
+    (.setCardPanel @contp-atom cardp)
+    ;(.setBorder cardp (javax.swing.border.EmptyBorder. 0 0 0 0))
+    (.add cardp @contp-atom "no split")
+    cardp))
+
+(defn test-component []
+  (tile {:create-content (fn [type] (javax.swing.JTextArea. (str (gensym type))))
+         :create-menu (fn [type ] (javax.swing.JLabel. (str "menu for " type)))
+         :default-type "type1"
+         :types (into-array ["type1" "type2" "type3"])}))
