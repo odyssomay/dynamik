@@ -295,10 +295,12 @@
                     (condp = (.getOrientation sp)
                       JSplitPane/VERTICAL_SPLIT
                       {:direction :horizontal 
+                       :location (.getDividerLocation sp)
                        :top    (.getTileLayout (.getTopComponent sp))
                        :bottom (.getTileLayout (.getBottomComponent sp))}
                       JSplitPane/HORIZONTAL_SPLIT
                       {:direction :vertical
+                       :location (.getDividerLocation sp)
                        :left  (.getTileLayout (.getLeftComponent sp))
                        :right (.getTileLayout (.getRightComponent sp))})
                     (.getTileLayout (.getContentPanel this))))
@@ -309,13 +311,15 @@
                       (let [sp (.getSplitPane this)]
                         (case direction
                           :horizontal
-                          (let [{:keys [top bottom]} layout]
+                          (let [{:keys [top bottom location]} layout]
                             (.setTileLayout (.getTopComponent sp) top)
-                            (.setTileLayout (.getBottomComponent sp) bottom))
+                            (.setTileLayout (.getBottomComponent sp) bottom)
+                            (.setDividerLocation sp location))
                           :vertical
-                          (let [{:keys [left right]} layout]
+                          (let [{:keys [left right location]} layout]
                             (.setTileLayout (.getLeftComponent sp) left)
-                            (.setTileLayout (.getRightComponent sp) right)))))
+                            (.setTileLayout (.getRightComponent sp) right)
+                            (.setDividerLocation sp location)))))
                     (.setTileLayout (.getContentPanel this) layout))))]
     (.setCardPanel @contp-atom cardp)
     (.add cardp @contp-atom "no split")
