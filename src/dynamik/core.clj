@@ -4,17 +4,17 @@
 
 ;; protocols
 
-(defprotocol dynamikType
+(defprotocol Type
   (setType [this type])
   (getType [this]))
 
-(defprotocol dynamikPanel
+(defprotocol View
   (drawSplit [this coordinate direction] )
   (drawMrg [this direction])
   (setCardPanel [this card-panel])
   (getCardPanel [this]))
 
-(defprotocol dynamikCardPanel
+(defprotocol Tile
   (split [this coordinate direction] )
   (mrg [this id direction] )
   (sendDrawMrg [this id direction])
@@ -23,6 +23,10 @@
   (setContentPanel [this p])
   (getContentPanel [this])
   (getSplitPane [this]))
+
+(defprotocol Layout
+  (getTileLayout [this] )
+  (setTileLayout [this layout]))
 
 ;; drawing
 
@@ -76,7 +80,7 @@
 (defn type-panel [f]
   (let [layout (java.awt.CardLayout.)
         types (atom #{})
-        p (proxy [javax.swing.JPanel dynamik.core.dynamikType] [(java.awt.CardLayout.)]
+        p (proxy [javax.swing.JPanel dynamik.core.Type] [(java.awt.CardLayout.)]
             (setType [type]
               (if (contains? @types type)
                 (show-card this type)
@@ -158,7 +162,7 @@
 ;; panel
 
 (defn edit-bar [location content]
-  (proxy [javax.swing.JComponent dynamik.core.dynamikPanel] []
+  (proxy [javax.swing.JComponent] []
     (paintComponent [g]
       (let [gc (.create g)
             b (.getClipBounds g)]
@@ -180,11 +184,14 @@
         menu-panel (javax.swing.JPanel. (BorderLayout.))
         edit-bar-west (edit-bar :west content)
         edit-bar-south (edit-bar :south content)
-        enclosing-panel (proxy [javax.swing.JPanel dynamik.core.dynamikPanel] [(BorderLayout.)]
+        enclosing-panel (proxy [javax.swing.JPanel dynamik.core.View dynamik.core.Layout] [(BorderLayout.)]
                           (drawSplit [coordinate direction] )
-                          (drawMrg [d]     )
+                          (drawMrg [d] )
                           (setCardPanel [c-p] (reset! cardp c-p))
-                          (getCardPanel []  @cardp))]
+                          (getCardPanel []  @cardp)
+                          (getTileLayout [] (.getSelectedItem typec))
+                          (setTileLayout [layout] 
+                            (.setSelectedItem typec layout)))]
     (add-mouse-listener edit-bar-west enclosing-panel :west)
     (add-mouse-listener edit-bar-south enclosing-panel :south)
     (.addActionListener typec
@@ -213,7 +220,7 @@
                      (.show (.getLayout p) p s)
                      (.revalidate p)
                      (.repaint p)))
-        cardp (proxy [javax.swing.JPanel dynamik.core.dynamikCardPanel] [(java.awt.CardLayout.)]
+        cardp (proxy [javax.swing.JPanel dynamik.core.Tile dynamik.core.Layout] [(java.awt.CardLayout.)]
                 (split [coordinate direction]
                   (let [splitp (JSplitPane. (case direction
                                               :horizontal JSplitPane/VERTICAL_SPLIT
@@ -282,7 +289,34 @@
                   (reset! splitp-atom nil)
                   (set-view this p))
                 (getContentPanel [] @contp-atom)
-                (getSplitPane [] @splitp-atom))]
+                (getSplitPane [] @splitp-atom)
+                (getTileLayout []
+                  (if-let [sp (.getSplitPane this)]
+                    (condp = (.getOrientation sp)
+                      JSplitPane/VERTICAL_SPLIT
+                      {:direction :horizontal 
+                       :top    (.getTileLayout (.getTopComponent sp))
+                       :bottom (.getTileLayout (.getBottomComponent sp))}
+                      JSplitPane/HORIZONTAL_SPLIT
+                      {:direction :vertical
+                       :left  (.getTileLayout (.getLeftComponent sp))
+                       :right (.getTileLayout (.getRightComponent sp))})
+                    (.getTileLayout (.getContentPanel this))))
+                (setTileLayout [layout]
+                  (if (map? layout)
+                    (let [{:keys [direction]} layout]
+                      (.split this 0 (:direction layout))
+                      (let [sp (.getSplitPane this)]
+                        (case direction
+                          :horizontal
+                          (let [{:keys [top bottom]} layout]
+                            (.setTileLayout (.getTopComponent sp) top)
+                            (.setTileLayout (.getBottomComponent sp) bottom))
+                          :vertical
+                          (let [{:keys [left right]} layout]
+                            (.setTileLayout (.getLeftComponent sp) left)
+                            (.setTileLayout (.getRightComponent sp) right)))))
+                    (.setTileLayout (.getContentPanel this) layout))))]
     (.setCardPanel @contp-atom cardp)
     (.add cardp @contp-atom "no split")
     cardp))
