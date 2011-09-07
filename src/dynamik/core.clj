@@ -66,23 +66,6 @@
                    ])
       3)))
 
-;  (let [gc (.create g)
-;        b (.getClipBounds gc)]
-;    (case direction
-;      :up (.translate gc (double (/ (.width b) 2) (.height b)))
-;      :down (.translate gc (double (/ (.width b) 2)) 0.0)
-;      :right (.translate gc 0.0 (double (/ (.height b) 2)))
-;      :left (.translate gc (double (.width b)) (double (/ (.height b) 2))))
-;    (cond 
-;      (or (= direction :up) (= direction :down))
-;      (.fillOval 
-;              
-;              (.translate gc (double (/ (.width b) 2)) 0.0)
-;                (.fillRect gc
-;                  (- (int (/ (.width b) 3)))
-;                  0 (int (* (int (/ (.width b) 3)) 2))
-;                  (int (/ (.height b) 2)))))))
-
 ;; card-layout
 
 (defn show-card [p s]
