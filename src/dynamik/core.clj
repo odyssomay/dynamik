@@ -99,6 +99,12 @@
     (.setType mp default-type)
     {:content cp :menu mp}))
 
+(defn content-panel [{:keys [create-content default-type]}]
+  (let [ct (memoize create-content)
+        cp (type-panel #(:content (ct %)))]
+    (.setType cp default-type)
+    {:content cp}))
+
 ;; listening
 
 (def split-block-size 30)
@@ -151,53 +157,55 @@
 
 ;; panel
 
-(defn edit-panel []
+(defn edit-component [typec]
   (let [action (atom nil)
         direction (atom nil)
         coordinate (atom nil)
-        reset-all (fn [] (reset! action nil) (reset! direction nil) (reset! coordinate nil))]
-    (proxy [javax.swing.JPanel dynamik.core.Drawable] []
-      (paintComponent [g]
-        (let [gc (.create g)
-              b (.getClipBounds g)]
-          (.setColor gc java.awt.Color/gray)
-          (.fillRect gc 0 0 (.width b) (.height b))
-          (.setColor gc java.awt.Color/black)
-          (.translate gc (double (/ (.width b) 2)) (double (/ (.height b) 2)))
-          (.fill3DRect gc (int (- (/ split-block-size 2)))
-                          (int (- (/ split-block-size 2)))
-                          split-block-size split-block-size
-                          true))
-        (let [gc (.create g)
-              b (.getClipBounds g)]
-          (.setColor gc java.awt.Color/black)
-          (case @action
-            :split (do (draw-split gc @coordinate @direction)
-                       (reset-all))
-            :merge (do (draw-mrg-arrow gc @direction)
-                       (reset-all))
-            nil)))
-      (drawSplit [c d]
-        (reset! action :split)
-        (reset! direction d)
-        (reset! coordinate c)
-        (.repaint this))
-      (drawMrg [d]
-        (reset! action :merge)
-        (reset! direction d)
-        (.repaint this)))))
+        reset-all (fn [] (reset! action nil) (reset! direction nil) (reset! coordinate nil))
+        c
+        (proxy [javax.swing.JComponent dynamik.core.Drawable] []
+          (paintComponent [g]
+            (let [gc (.create g)
+                  b (.getClipBounds g)]
+              (.setColor gc java.awt.Color/gray)
+              (.fillRect gc 0 0 (.width b) (.height b))
+              (.setColor gc java.awt.Color/black)
+              (.translate gc (double (/ (.width b) 2)) (double (/ (.height b) 2)))
+              (.fillRect gc (int (- (/ split-block-size 2)))
+                         (int (- (/ split-block-size 2)))
+                         split-block-size split-block-size))
+            (let [gc (.create g)
+                  b (.getClipBounds g)]
+              (.setColor gc java.awt.Color/black)
+              (case @action
+                :split (do (draw-split gc @coordinate @direction)
+                         (reset-all))
+                :merge (do (draw-mrg-arrow gc @direction)
+                         (reset-all))
+                nil)))
+          (drawSplit [c d]
+            (reset! action :split)
+            (reset! direction d)
+            (reset! coordinate c)
+            (.repaint this))
+          (drawMrg [d]
+            (reset! action :merge)
+            (reset! direction d)
+            (.repaint this)))]
+    c))
 
-(defn view [options]
+(defn view [{:keys [menu?] :as options}]
   (let [view-panel (javax.swing.JPanel. (java.awt.CardLayout.))
-        epanel (edit-panel)
         cardp (atom nil)
         typec (type-combo-box options)
-        {:keys [content menu]} (content-menu-panel options)
+        ec (edit-component typec)
+        content+menu? (if menu? (content-menu-panel options) (content-panel options))
         menu-panel (javax.swing.JPanel. (BorderLayout.))
+        epanel (javax.swing.JPanel. (BorderLayout.))
         enclosing-panel (proxy [javax.swing.JPanel dynamik.core.Drawable
                                 dynamik.core.View dynamik.core.Layout] [(BorderLayout.)]
-                          (drawSplit [coordinate direction] (.drawSplit epanel coordinate direction))
-                          (drawMrg [d] (.drawMrg epanel d))
+                          (drawSplit [coordinate direction] (.drawSplit ec coordinate direction))
+                          (drawMrg [d] (.drawMrg ec d))
                           (setCardPanel [c-p] (reset! cardp c-p))
                           (getCardPanel []  @cardp)
                           (getTileLayout [] (.getSelectedItem typec))
@@ -205,21 +213,28 @@
                             (.setSelectedItem typec layout))
                           (setEditable [editable?]
                             (.show (.getLayout view-panel) view-panel (if editable? "edit" "content"))))]
-    (add-mouse-listener epanel enclosing-panel)
-    (.add view-panel content "content")
+    (add-mouse-listener ec enclosing-panel)
+    (.add epanel ec BorderLayout/CENTER)
+    (.add view-panel (:content content+menu?) "content")
     (.add view-panel epanel "edit")
     (.addActionListener typec
       (reify java.awt.event.ActionListener
         (actionPerformed [_ _]
           (let [t (.getSelectedItem typec)]
-            (.setType content t)
-            (.setType menu t)))))
-    (doto menu-panel
-      (.add typec BorderLayout/WEST)
-      (.add menu BorderLayout/CENTER))
+            (.setType (:content content+menu?) t)
+            (if menu? (.setType (:menu content+menu?) t))))))
+    (if menu?
+      (let [{:keys [content menu]} content+menu?
+            menu-panel (javax.swing.JPanel. (BorderLayout.))]
+        (doto menu-panel
+          (.add typec BorderLayout/WEST)
+          (.add menu BorderLayout/CENTER))
+        (.add enclosing-panel menu-panel BorderLayout/NORTH))
+      (.add epanel typec BorderLayout/NORTH))
     (doto enclosing-panel
       (.add view-panel BorderLayout/CENTER)
-      (.add menu-panel BorderLayout/NORTH))
+      (if menu?
+        (.add menu-panel BorderLayout/NORTH)))
     enclosing-panel))
 
 (defn tile [{:keys [parent contp] :as options}]
@@ -357,4 +372,5 @@
                                    (.append c "insert"))))
                              {:content c :menu m}))
          :default-type "type1"
+         :menu? true
          :types (into-array ["type1" "type2" "type3"])}))
