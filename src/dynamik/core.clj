@@ -170,7 +170,7 @@
               (.setColor gc java.awt.Color/gray)
               (.fillRect gc 0 0 (.width b) (.height b))
               (.setColor gc java.awt.Color/black)
-              (.translate gc (double (/ (.width b) 2)) (double (/ (.height b) 2)))
+              (.translate gc (double (/ (.getWidth this) 2)) (double (/ (.getHeight this) 2)))
               (.fillRect gc (int (- (/ split-block-size 2)))
                          (int (- (/ split-block-size 2)))
                          split-block-size split-block-size))
