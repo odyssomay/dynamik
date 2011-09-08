@@ -279,8 +279,7 @@
                                (= direction :up))
                             (f this id direction)
                           :else (if parent 
-                                  (.dotoMergingSplit parent (.getId this) direction f)
-                                  (println "merging doesn't make sense!")))
+                                  (.dotoMergingSplit parent (.getId this) direction f)))
                         JSplitPane/HORIZONTAL_SPLIT
                         (cond
                           (and (= id (.getId (.getLeftComponent sp)))
@@ -290,8 +289,7 @@
                                (= direction :left))
                             (f this id direction)
                           :else (if parent 
-                                  (.dotoMergingSplit parent (.getId this) direction f)
-                                  (println "merging doesn't make sense!"))))
+                                  (.dotoMergingSplit parent (.getId this) direction f))))
                       (if parent
                         (.dotoMergingSplit parent (.getId this) direction f)))))
                 (mrg [id direction]
