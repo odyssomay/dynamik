@@ -29,7 +29,8 @@
 (defprotocol Layout
   (getTileLayout [this] )
   (setTileLayout [this layout])
-  (setEditable [this editable?]))
+  (setEditable [this editable?])
+  (setTypes [this t]))
 
 ;; drawing
 
@@ -211,6 +212,9 @@
                           (getTileLayout [] (.getSelectedItem typec))
                           (setTileLayout [layout] 
                             (.setSelectedItem typec layout))
+                          (setTypes [ts] (.removeAllItems typec)
+                                         (doseq [t ts]
+                                           (.addItem typec t)))
                           (setEditable [editable?]
                             (.show (.getLayout view-panel) view-panel (if editable? "edit" "content"))))]
     (add-mouse-listener ec enclosing-panel)
@@ -350,6 +354,11 @@
                             (.setTileLayout (.getRightComponent sp) right)
                             (.setDividerLocation sp location)))))
                     (.setTileLayout (.getContentPanel this) layout)))
+                (setTypes [ts]
+                  (if-let [sp (.getSplitPane this)]
+                    (do (.setTypes (.getLeftComponent sp) ts)
+                        (.setTypes (.getRightComponent sp) ts))
+                    (.setTypes (.getContentPanel this) ts)))
                 (setEditable [e?] 
                   (reset! editable? e?) 
                   (if-let [sp (.getSplitPane this)]
