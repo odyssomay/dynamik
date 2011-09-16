@@ -195,7 +195,7 @@
             (.repaint this)))]
     c))
 
-(defn view [{:keys [menu?] :as options}]
+(defn view [{:keys [menu? default-type] :as options}]
   (let [view-panel (javax.swing.JPanel. (java.awt.CardLayout.))
         cardp (atom nil)
         typec (type-combo-box options)
@@ -239,6 +239,8 @@
       (.add view-panel BorderLayout/CENTER)
       (if menu?
         (.add menu-panel BorderLayout/NORTH)))
+    (.setSelectedItem typec default-type)
+    (.setType (:content content+menu?) (.getSelectedItem typec))
     enclosing-panel))
 
 (defn tile [{:keys [parent contp] :as options}]
@@ -246,6 +248,7 @@
         editable? (atom false)
         contp-atom (atom (if contp contp (view options)))
         splitp-atom (atom nil)
+        types (atom (:types options))
         set-view (fn [p c]
                    (let [s (str (gensym))]
                      (.add p c s)
@@ -254,8 +257,8 @@
                      (.repaint p)))
         cardp (proxy [javax.swing.JPanel dynamik.core.Tile dynamik.core.Layout] [(java.awt.CardLayout.)]
                 (split [coordinate direction]
-                  (let [t1 (tile (merge options {:parent this :contp @contp-atom}))
-                        t2 (tile (merge options {:parent this :contp nil}))
+                  (let [t1 (tile (merge options {:parent this :contp @contp-atom :types @types}))
+                        t2 (tile (merge options {:parent this :contp nil :types @types}))
                         splitp (JSplitPane. (case direction
                                               :horizontal JSplitPane/VERTICAL_SPLIT
                                               :vertical   JSplitPane/HORIZONTAL_SPLIT)
@@ -355,6 +358,7 @@
                             (.setDividerLocation sp location)))))
                     (.setTileLayout (.getContentPanel this) layout)))
                 (setTypes [ts]
+                  (reset! types ts)
                   (if-let [sp (.getSplitPane this)]
                     (do (.setTypes (.getLeftComponent sp) ts)
                         (.setTypes (.getRightComponent sp) ts))
@@ -378,6 +382,6 @@
                                  (actionPerformed [_ _]
                                    (.append c "insert"))))
                              {:content c :menu m}))
-         :default-type "type1"
+         :default-type "type3"
          :menu? true
          :types (into-array ["type1" "type2" "type3"])}))
